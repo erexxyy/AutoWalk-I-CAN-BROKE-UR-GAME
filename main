@@ -1,0 +1,253 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+
+-- ===== PASTIKAN KARAKTER SIAP =====
+local function getChar()
+    local char = player.Character or player.CharacterAdded:Wait()
+    return char, char:WaitForChild("Humanoid"), char:WaitForChild("HumanoidRootPart")
+end
+
+local character, humanoid, hrp = getChar()
+player.CharacterAdded:Connect(function(c)
+    character, humanoid, hrp = getChar()
+end)
+
+-- ===== GUI UTAMA =====
+local gui = Instance.new("ScreenGui")
+gui.Name = "AutoWalkGUI"
+gui.Parent = player:WaitForChild("PlayerGui")
+gui.Enabled = false -- disable dulu, aktifkan setelah key benar
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 220, 0, 200)
+mainFrame.Position = UDim2.new(0.4, 0, 0.3, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.Draggable = true
+mainFrame.Parent = gui
+
+-- Bar Nama
+local titleBar = Instance.new("Frame")
+titleBar.Size = UDim2.new(1, 0, 0, 30)
+titleBar.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+titleBar.Parent = mainFrame
+
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Size = UDim2.new(1, -60, 1, 0)
+titleLabel.Position = UDim2.new(0, 0, 0, 0)
+titleLabel.BackgroundTransparency = 1
+titleLabel.Text = "I CAN BROKE UR GAME"
+titleLabel.TextColor3 = Color3.fromRGB(255,255,255)
+titleLabel.Font = Enum.Font.SourceSansBold
+titleLabel.TextSize = 16
+titleLabel.Parent = titleBar
+
+-- Tombol Minimize / Close
+local minimizeBtn = Instance.new("TextButton")
+minimizeBtn.Size = UDim2.new(0, 30, 1, 0)
+minimizeBtn.Position = UDim2.new(1, -60, 0, 0)
+minimizeBtn.Text = "_"
+minimizeBtn.Font = Enum.Font.SourceSansBold
+minimizeBtn.TextSize = 18
+minimizeBtn.BackgroundColor3 = Color3.fromRGB(100,100,100)
+minimizeBtn.TextColor3 = Color3.fromRGB(255,255,255)
+minimizeBtn.Parent = titleBar
+
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 30, 1, 0)
+closeBtn.Position = UDim2.new(1, -30, 0, 0)
+closeBtn.Text = "X"
+closeBtn.Font = Enum.Font.SourceSansBold
+closeBtn.TextSize = 18
+closeBtn.BackgroundColor3 = Color3.fromRGB(100,100,100)
+closeBtn.TextColor3 = Color3.fromRGB(255,255,255)
+closeBtn.Parent = titleBar
+
+-- Tombol fungsional
+local buttons = {}
+local function makeButton(text, posY, callback)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 200, 0, 30)
+    btn.Position = UDim2.new(0, 10, 0, posY)
+    btn.BackgroundColor3 = Color3.fromRGB(80, 120, 200)
+    btn.TextColor3 = Color3.fromRGB(1,1,1)
+    btn.Font = Enum.Font.SourceSans
+    btn.TextSize = 16
+    btn.Text = text
+    btn.Parent = mainFrame
+    btn.MouseButton1Click:Connect(callback)
+    table.insert(buttons, btn)
+    return btn
+end
+
+local status = Instance.new("TextLabel", mainFrame)
+status.Size = UDim2.new(1, -20, 0, 20)
+status.Position = UDim2.new(0, 10, 0, 170)
+status.BackgroundTransparency = 1
+status.TextColor3 = Color3.fromRGB(255,255,255)
+status.Text = "Idle"
+
+-- ==== SCRIPT REKAMAN & PLAYBACK ==== --
+local recording = false
+local recordData = {}
+local conn
+local playing = false
+local looping = false
+
+local function startRecord()
+    recording = true
+    recordData = {}
+    status.Text = "Recording..."
+    local startTick = tick()
+    conn = RunService.Heartbeat:Connect(function()
+        if not hrp then return end
+        table.insert(recordData, {
+            cf = hrp.CFrame,
+            jump = humanoid.Jump,
+            t = tick() - startTick
+        })
+    end)
+end
+
+local function stopRecord()
+    recording = false
+    if conn then conn:Disconnect() end
+    status.Text = "Recorded "..tostring(#recordData).." steps"
+end
+
+local function playRecord()
+    if #recordData == 0 or playing then return end
+    playing = true
+    status.Text = "Playing..."
+    local startTick = tick()
+
+    for i, step in ipairs(recordData) do
+        if not playing then break end
+        local waitTime = (startTick + step.t) - tick()
+        if waitTime > 0 then task.wait(waitTime) end
+
+        local targetPos = step.cf.Position
+        local dist = (hrp.Position - targetPos).Magnitude
+
+        if dist > 15 then
+            hrp.CFrame = step.cf
+        else
+            humanoid:MoveTo(targetPos)
+        end
+
+        if step.jump then
+            humanoid.Jump = true
+        end
+    end
+
+    playing = false
+    status.Text = "Finished"
+end
+
+local function stopPlay()
+    playing = false
+    looping = false
+    status.Text = "Stopped"
+end
+
+local function loopRecord()
+    if #recordData == 0 or looping then return end
+    looping = true
+    status.Text = "Looping..."
+    task.spawn(function()
+        while looping do
+            playRecord()
+            task.wait(0.1)
+        end
+    end)
+end
+
+local function stopLoop()
+    looping = false
+    status.Text = "Stopped Loop"
+end
+
+-- Tombol
+makeButton("Start Record", 40, startRecord)
+makeButton("Stop Record", 70, stopRecord)
+makeButton("Play", 100, playRecord)
+makeButton("Stop Play", 130, stopPlay)
+makeButton("Start Loop", 160, loopRecord)
+makeButton("Stop Loop", 190, stopLoop)
+
+-- Minimize / Maximize
+local minimized = false
+minimizeBtn.MouseButton1Click:Connect(function()
+    if minimized then
+        for _, btn in pairs(buttons) do btn.Visible = true end
+        mainFrame.Size = UDim2.new(0, 220, 0, 200)
+        minimized = false
+    else
+        for _, btn in pairs(buttons) do btn.Visible = false end
+        mainFrame.Size = UDim2.new(0, 220, 0, 30)
+        minimized = true
+    end
+end)
+
+-- Close
+closeBtn.MouseButton1Click:Connect(function()
+    gui:Destroy()
+end)
+
+-- ===== KEY SYSTEM =====
+local allowedKey = "random" -- ganti key sesuai keinginan
+
+local keyGui = Instance.new("ScreenGui")
+keyGui.Name = "KeySystemGUI"
+keyGui.Parent = player:WaitForChild("PlayerGui")
+
+local keyFrame = Instance.new("Frame")
+keyFrame.Size = UDim2.new(0, 300, 0, 150)
+keyFrame.Position = UDim2.new(0.5, -150, 0.5, -75)
+keyFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+keyFrame.BorderSizePixel = 0
+keyFrame.Parent = keyGui
+
+local keyLabel = Instance.new("Enter Key")
+keyLabel.Size = UDim2.new(1, -20, 0, 50)
+keyLabel.Position = UDim2.new(0, 10, 0, 10)
+keyLabel.BackgroundTransparency = 1
+keyLabel.TextColor3 = Color3.fromRGB(255,255,255)
+keyLabel.Text = "Enter Key:"
+keyLabel.Font = Enum.Font.SourceSansBold
+keyLabel.TextSize = 20
+keyLabel.Parent = keyFrame
+
+local keyBox = Instance.new("TextBox")
+keyBox.Size = UDim2.new(1, -20, 0, 40)
+keyBox.Position = UDim2.new(0, 10, 0, 70)
+keyBox.ClearTextOnFocus = false
+keyBox.BackgroundColor3 = Color3.fromRGB(60,60,60)
+keyBox.TextColor3 = Color3.fromRGB(255,255,255)
+keyBox.Font = Enum.Font.SourceSans
+keyBox.TextSize = 18
+keyBox.PlaceholderText = "Enter Key Here..."
+keyBox.Parent = keyFrame
+
+local submitBtn = Instance.new("TextButton")
+submitBtn.Size = UDim2.new(0, 100, 0, 30)
+submitBtn.Position = UDim2.new(0.5, -50, 1, -40)
+submitBtn.Text = "Submit"
+submitBtn.Font = Enum.Font.SourceSansBold
+submitBtn.TextSize = 18
+submitBtn.BackgroundColor3 = Color3.fromRGB(80, 150, 80)
+submitBtn.TextColor3 = Color3.fromRGB(255,255,255)
+submitBtn.Parent = keyFrame
+
+submitBtn.MouseButton1Click:Connect(function()
+    if keyBox.Text == allowedKey then
+        keyGui:Destroy()
+        gui.Enabled = true
+    else
+        keyLabel.Text = "Wrong Key! Try Again..."
+        keyLabel.TextColor3 = Color3.fromRGB(255,100,100)
+        keyBox.Text = ""
+    end
+end)
