@@ -1,0 +1,286 @@
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+
+-- tunggu PlayerGui siap
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+-- === ScreenGui ===
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "ViolenceDistrictGui"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = PlayerGui
+
+-- ===== Key System Frame =====
+local keyFrame = Instance.new("Frame")
+keyFrame.Size = UDim2.new(0,200,0,120)
+keyFrame.Position = UDim2.new(0.5,-100,0.5,-60)
+keyFrame.BackgroundColor3 = Color3.fromRGB(30,30,30)
+keyFrame.BorderSizePixel = 0
+keyFrame.Parent = screenGui
+
+local keyTitle = Instance.new("TextLabel")
+keyTitle.Size = UDim2.new(1,0,0,30)
+keyTitle.BackgroundTransparency = 1
+keyTitle.Text = "Enter Key"
+keyTitle.TextColor3 = Color3.new(1,1,1)
+keyTitle.Font = Enum.Font.SourceSansBold
+keyTitle.TextSize = 18
+keyTitle.Parent = keyFrame
+
+local keyBox = Instance.new("TextBox")
+keyBox.Size = UDim2.new(0.8,0,0,30)
+keyBox.Position = UDim2.new(0.1,0,0.4,0)
+keyBox.BackgroundColor3 = Color3.fromRGB(60,60,60)
+keyBox.Text = ""
+keyBox.PlaceholderText = ""
+keyBox.TextColor3 = Color3.new(1,1,1)
+keyBox.Font = Enum.Font.SourceSans
+keyBox.TextSize = 16
+keyBox.ClearTextOnFocus = false
+keyBox.Parent = keyFrame
+
+local unlockBtn = Instance.new("TextButton")
+unlockBtn.Size = UDim2.new(0.8,0,0,30)
+unlockBtn.Position = UDim2.new(0.1,0,0.7,0)
+unlockBtn.BackgroundColor3 = Color3.fromRGB(0,150,0)
+unlockBtn.Text = "Unlock"
+unlockBtn.TextColor3 = Color3.new(1,1,1)
+unlockBtn.Font = Enum.Font.SourceSansBold
+unlockBtn.TextSize = 16
+unlockBtn.Parent = keyFrame
+
+-- ===== GUI Utama =====
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0,160,0,220)
+mainFrame.Position = UDim2.new(0.05,0,0.25,0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(40,40,40)
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.Draggable = true
+mainFrame.Visible = false
+mainFrame.Parent = screenGui
+
+-- Top Bar
+local topBar = Instance.new("Frame")
+topBar.Size = UDim2.new(1,0,0,20)
+topBar.BackgroundColor3 = Color3.fromRGB(25,25,25)
+topBar.Parent = mainFrame
+
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Size = UDim2.new(1,-50,1,0)
+titleLabel.Position = UDim2.new(0,5,0,0)
+titleLabel.BackgroundTransparency = 1
+titleLabel.Text = "Violence District"
+titleLabel.TextColor3 = Color3.new(1,1,1)
+titleLabel.Font = Enum.Font.SourceSansBold
+titleLabel.TextSize = 12
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+titleLabel.Parent = topBar
+
+local function makeButton(txt,posX)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0,20,1,0)
+    btn.Position = UDim2.new(1,posX,0,0)
+    btn.BackgroundColor3 = Color3.fromRGB(80,80,80)
+    btn.TextColor3 = Color3.new(1,1,1)
+    btn.Text = txt
+    btn.Font = Enum.Font.SourceSansBold
+    btn.TextSize = 12
+    btn.Parent = topBar
+    return btn
+end
+
+local closeBtn = makeButton("X",-20)
+local minBtn = makeButton("-",-40)
+
+closeBtn.MouseButton1Click:Connect(function()
+    mainFrame.Visible = false
+end)
+
+-- Search bar kosong
+local searchBox = Instance.new("TextBox")
+searchBox.Size = UDim2.new(1,-8,0,20)
+searchBox.Position = UDim2.new(0,4,0,25)
+searchBox.BackgroundColor3 = Color3.fromRGB(60,60,60)
+searchBox.PlaceholderText = ""
+searchBox.Text = ""
+searchBox.TextColor3 = Color3.new(1,1,1)
+searchBox.Font = Enum.Font.SourceSans
+searchBox.TextSize = 12
+searchBox.ClearTextOnFocus = false
+searchBox.Parent = mainFrame
+
+-- Player list scrolling
+local playerList = Instance.new("ScrollingFrame")
+playerList.Size = UDim2.new(1,-8,1,-70)
+playerList.Position = UDim2.new(0,4,0,50)
+playerList.CanvasSize = UDim2.new(0,0,0,0)
+playerList.ScrollBarThickness = 4
+playerList.BackgroundColor3 = Color3.fromRGB(60,60,60)
+playerList.Parent = mainFrame
+
+-- ESP Button
+local espBtn = Instance.new("TextButton")
+espBtn.Size = UDim2.new(1,-8,0,20)
+espBtn.AnchorPoint = Vector2.new(0,1)
+espBtn.Position = UDim2.new(0,4,1,-4)
+espBtn.BackgroundColor3 = Color3.fromRGB(0,120,255)
+espBtn.TextColor3 = Color3.new(1,1,1)
+espBtn.Text = "ESP OFF"
+espBtn.Font = Enum.Font.SourceSansBold
+espBtn.TextSize = 12
+espBtn.Parent = mainFrame
+
+-- Fungsi player list
+local function createPlayerButton(p)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1,-6,0,20)
+    btn.TextColor3 = Color3.new(1,1,1)
+    btn.Text = p.Name
+    btn.Font = Enum.Font.SourceSansBold
+    btn.TextSize = 12
+    btn.Parent = playerList
+
+    if LocalPlayer.Team and p.Team == LocalPlayer.Team then
+        btn.BackgroundColor3 = Color3.fromRGB(0,150,0)
+    else
+        btn.BackgroundColor3 = Color3.fromRGB(150,0,0)
+    end
+
+    btn.MouseButton1Click:Connect(function()
+        local char = p.Character
+        local myChar = LocalPlayer.Character
+        if char and myChar then
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            local myHrp = myChar:FindFirstChild("HumanoidRootPart")
+            if hrp and myHrp then
+                myHrp.CFrame = hrp.CFrame + Vector3.new(0,3,0)
+            end
+        end
+    end)
+    return btn
+end
+
+local function updatePlayerList()
+    playerList:ClearAllChildren()
+    local y = 0
+    local keyword = string.lower(searchBox.Text)
+    for _,p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            if keyword == "" or string.find(string.lower(p.Name),keyword) then
+                local btn = createPlayerButton(p)
+                btn.Position = UDim2.new(0,3,0,y)
+                y = y + 22
+            end
+        end
+    end
+    playerList.CanvasSize = UDim2.new(0,0,0,y)
+end
+
+Players.PlayerAdded:Connect(updatePlayerList)
+Players.PlayerRemoving:Connect(updatePlayerList)
+searchBox:GetPropertyChangedSignal("Text"):Connect(updatePlayerList)
+LocalPlayer.CharacterAdded:Connect(updatePlayerList)
+updatePlayerList()
+
+-- Minimize rapi: hanya top bar terlihat
+local minimized = false
+minBtn.MouseButton1Click:Connect(function()
+    minimized = not minimized
+    searchBox.Visible = not minimized
+    playerList.Visible = not minimized
+    espBtn.Visible = not minimized
+    mainFrame.Size = minimized and UDim2.new(0,160,0,20) or UDim2.new(0,160,0,220)
+end)
+
+-- ESP toggle
+local espEnabled = false
+local espConnections = {}
+
+local function clearESP()
+    for _,v in ipairs(espConnections) do v:Disconnect() end
+    espConnections = {}
+    for _,p in ipairs(Players:GetPlayers()) do
+        if p.Character then
+            for _,d in ipairs(p.Character:GetDescendants()) do
+                if (d:IsA("Highlight") or d:IsA("BillboardGui")) and d.Name == "ESPObject" then
+                    d:Destroy()
+                end
+            end
+        end
+    end
+end
+
+local function addESP(char,p)
+    if not char then return end
+    local hl = Instance.new("Highlight")
+    hl.Name = "ESPObject"
+    hl.Adornee = char
+    if LocalPlayer.Team and p.Team == LocalPlayer.Team then
+        hl.FillColor = Color3.fromRGB(0,255,0)
+    else
+        hl.FillColor = Color3.fromRGB(255,0,0)
+    end
+    hl.OutlineTransparency = 0
+    hl.Parent = char
+
+    local head = char:FindFirstChild("Head")
+    if head then
+        local bb = Instance.new("BillboardGui")
+        bb.Name = "ESPObject"
+        bb.Size = UDim2.new(0,80,0,15)
+        bb.StudsOffset = Vector3.new(0,2,0)
+        bb.AlwaysOnTop = true
+        bb.Parent = head
+
+        local txt = Instance.new("TextLabel")
+        txt.Size = UDim2.new(1,0,1,0)
+        txt.BackgroundTransparency = 1
+        txt.Text = p.Name
+        txt.TextColor3 = hl.FillColor
+        txt.Font = Enum.Font.SourceSansBold
+        txt.TextSize = 10
+        txt.Parent = bb
+    end
+end
+
+local function enableESP()
+    for _,p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            if p.Character then addESP(p.Character,p) end
+            table.insert(espConnections, p.CharacterAdded:Connect(function(c)
+                task.wait(0.5)
+                addESP(c,p)
+            end))
+        end
+    end
+end
+
+espBtn.MouseButton1Click:Connect(function()
+    espEnabled = not espEnabled
+    if espEnabled then
+        clearESP()
+        enableESP()
+        espBtn.Text = "ESP ON"
+        espBtn.BackgroundColor3 = Color3.fromRGB(0,200,100)
+    else
+        clearESP()
+        espBtn.Text = "ESP OFF"
+        espBtn.BackgroundColor3 = Color3.fromRGB(0,120,255)
+    end
+end)
+
+-- Key unlock
+unlockBtn.MouseButton1Click:Connect(function()
+    if keyBox.Text == "justkey" then
+        mainFrame.Visible = true
+        keyFrame:Destroy()
+    else
+        unlockBtn.BackgroundColor3 = Color3.fromRGB(150,0,0)
+        unlockBtn.Text = "Key Salah"
+        task.wait(1)
+        unlockBtn.BackgroundColor3 = Color3.fromRGB(0,150,0)
+        unlockBtn.Text = "Unlock"
+    end
+end)
