@@ -1,0 +1,530 @@
+-- ===================== FULL SCRIPT: GUI + PLAYER ESP (Team Color) + GENERATOR ESP + GENERATOR PANEL (TELEPORT + REPAIR PROGRESS + AUTO REFRESH) =====================
+-- Author: integrated final extended v7.2 (Delta-friendly, improved generator cleanup)
+-- Fitur: Static Player ESP (bold), Generator ESP (highlight + billboard + thin stroke),
+-- Generator panel dengan teleport, repair progress, dan loop reset generator ESP tiap ESP_REFRESH detik.
+-- Perbaikan: generator ESP yang orphan (ketika generator dihapus) akan dibersihkan.
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local CollectionService = game:GetService("CollectionService")
+local workspace = workspace
+
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+-- ========== CONFIG ==========
+local GENERATOR_TAG = "Generator"
+local ESP_REFRESH = 5 -- detik
+local PLAYER_BB_SIZE = 11
+local GENERATOR_BB_SIZE = 15
+local COLOR_TEAM = Color3.fromRGB(0,150,255)
+local COLOR_ENEMY = Color3.fromRGB(255,0,0)
+local COLOR_GEN = Color3.fromRGB(0,255,0)
+
+-- ========== GUI SETUP ==========
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "ViolenceDistrictGui"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = PlayerGui
+
+local function makeFrame(size,pos,color,parent)
+	local f = Instance.new("Frame")
+	f.Size = size
+	f.Position = pos
+	f.BackgroundColor3 = color
+	f.BorderSizePixel = 0
+	f.Active = true
+	f.Draggable = true
+	f.Parent = parent
+	return f
+end
+
+-- Main GUI
+local mainFrame = makeFrame(UDim2.new(0,160,0,220), UDim2.new(0.05,0,0.25,0), Color3.fromRGB(40,40,40), screenGui)
+local topBar = Instance.new("Frame", mainFrame)
+topBar.Size = UDim2.new(1,0,0,20)
+topBar.BackgroundColor3 = Color3.fromRGB(25,25,25)
+
+local titleLabel = Instance.new("TextLabel", topBar)
+titleLabel.Size = UDim2.new(1,-50,1,0)
+titleLabel.Position = UDim2.new(0,5,0,0)
+titleLabel.BackgroundTransparency = 1
+titleLabel.Text = "Violence District"
+titleLabel.TextColor3 = Color3.new(1,1,1)
+titleLabel.Font = Enum.Font.SourceSansBold
+titleLabel.TextSize = 12
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local function makeBarBtn(txt,x)
+	local b = Instance.new("TextButton")
+	b.Size = UDim2.new(0,20,1,0)
+	b.Position = UDim2.new(1,x,0,0)
+	b.BackgroundColor3 = Color3.fromRGB(80,80,80)
+	b.Text = txt
+	b.TextColor3 = Color3.new(1,1,1)
+	b.Font = Enum.Font.SourceSansBold
+	b.TextSize = 12
+	b.Parent = topBar
+	return b
+end
+
+local closeBtn = makeBarBtn("X",-20)
+local minBtn = makeBarBtn("-", -40)
+
+closeBtn.MouseButton1Click:Connect(function()
+	mainFrame.Visible = false
+end)
+
+local searchBox = Instance.new("TextBox", mainFrame)
+searchBox.Size = UDim2.new(1,-8,0,20)
+searchBox.Position = UDim2.new(0,4,0,25)
+searchBox.BackgroundColor3 = Color3.fromRGB(60,60,60)
+searchBox.TextColor3 = Color3.new(1,1,1)
+searchBox.Font = Enum.Font.SourceSans
+searchBox.TextSize = 12
+searchBox.ClearTextOnFocus = false
+
+local playerList = Instance.new("ScrollingFrame", mainFrame)
+playerList.Size = UDim2.new(1,-8,1,-70)
+playerList.Position = UDim2.new(0,4,0,50)
+playerList.CanvasSize = UDim2.new(0,0,0,0)
+playerList.ScrollBarThickness = 4
+playerList.BackgroundColor3 = Color3.fromRGB(60,60,60)
+
+local espBtn = Instance.new("TextButton", mainFrame)
+espBtn.Size = UDim2.new(1,-8,0,20)
+espBtn.AnchorPoint = Vector2.new(0,1)
+espBtn.Position = UDim2.new(0,4,1,-4)
+espBtn.BackgroundColor3 = Color3.fromRGB(0,120,255)
+espBtn.TextColor3 = Color3.new(1,1,1)
+espBtn.Text = "ESP OFF"
+espBtn.Font = Enum.Font.SourceSansBold
+espBtn.TextSize = 12
+
+local minimized = false
+minBtn.MouseButton1Click:Connect(function()
+	minimized = not minimized
+	searchBox.Visible = not minimized
+	playerList.Visible = not minimized
+	espBtn.Visible = not minimized
+	mainFrame.Size = minimized and UDim2.new(0,160,0,20) or UDim2.new(0,160,0,220)
+end)
+
+-- Player buttons
+local function makePlayerBtn(p)
+	local b = Instance.new("TextButton")
+	b.Size = UDim2.new(1,-6,0,20)
+	b.Text = p.Name
+	b.TextColor3 = Color3.new(1,1,1)
+	b.Font = Enum.Font.SourceSansBold
+	b.TextSize = 12
+	b.BackgroundColor3 = (LocalPlayer.Team and p.Team == LocalPlayer.Team) and Color3.fromRGB(0,150,0) or Color3.fromRGB(150,0,0)
+	b.Parent = playerList
+	b.MouseButton1Click:Connect(function()
+		local char = p.Character
+		local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+		if char and hrp then
+			local part = char:FindFirstChild("HumanoidRootPart")
+			if part then
+				hrp.CFrame = part.CFrame + Vector3.new(0,3,0)
+			end
+		end
+	end)
+	return b
+end
+
+local function refreshPlayerList()
+	playerList:ClearAllChildren()
+	local y = 0
+	for _,p in ipairs(Players:GetPlayers()) do
+		if p ~= LocalPlayer then
+			local btn = makePlayerBtn(p)
+			btn.Position = UDim2.new(0,3,0,y)
+			y = y + 22
+		end
+	end
+	playerList.CanvasSize = UDim2.new(0,0,0,y)
+end
+
+Players.PlayerAdded:Connect(refreshPlayerList)
+Players.PlayerRemoving:Connect(refreshPlayerList)
+searchBox:GetPropertyChangedSignal("Text"):Connect(refreshPlayerList)
+refreshPlayerList()
+
+-- ========== GENERATOR PANEL ==========
+local genFrame = makeFrame(UDim2.new(0,130,0,200), UDim2.new(0.05,170,0.25,0), Color3.fromRGB(35,35,35), screenGui)
+local genTop = Instance.new("Frame", genFrame)
+genTop.Size = UDim2.new(1,0,0,20)
+genTop.BackgroundColor3 = Color3.fromRGB(25,25,25)
+
+local genTitle = Instance.new("TextLabel", genTop)
+genTitle.Size = UDim2.new(1,-60,1,0)
+genTitle.Position = UDim2.new(0,5,0,0)
+genTitle.BackgroundTransparency = 1
+genTitle.Text = "Generators"
+genTitle.TextColor3 = Color3.new(1,1,1)
+genTitle.Font = Enum.Font.SourceSansBold
+genTitle.TextSize = 12
+genTitle.TextXAlignment = Enum.TextXAlignment.Left
+
+local genClose = Instance.new("TextButton", genTop)
+genClose.Size = UDim2.new(0,20,1,0)
+genClose.Position = UDim2.new(1,-20,0,0)
+genClose.BackgroundColor3 = Color3.fromRGB(80,80,80)
+genClose.Text = "X"
+genClose.TextColor3 = Color3.new(1,1,1)
+genClose.Font = Enum.Font.SourceSansBold
+genClose.TextSize = 12
+genClose.MouseButton1Click:Connect(function()
+	genFrame.Visible = false
+end)
+
+local genMin = Instance.new("TextButton", genTop)
+genMin.Size = UDim2.new(0,20,1,0)
+genMin.Position = UDim2.new(1,-40,0,0)
+genMin.BackgroundColor3 = Color3.fromRGB(80,80,80)
+genMin.Text = "-"
+genMin.TextColor3 = Color3.new(1,1,1)
+genMin.Font = Enum.Font.SourceSansBold
+genMin.TextSize = 12
+
+local genList = Instance.new("ScrollingFrame", genFrame)
+genList.Size = UDim2.new(1,-8,1,-24)
+genList.Position = UDim2.new(0,4,0,24)
+genList.BackgroundColor3 = Color3.fromRGB(50,50,50)
+genList.ScrollBarThickness = 4
+
+local genMinimized = false
+genMin.MouseButton1Click:Connect(function()
+	genMinimized = not genMinimized
+	genList.Visible = not genMinimized
+	genFrame.Size = genMinimized and UDim2.new(0,130,0,20) or UDim2.new(0,130,0,200)
+end)
+
+-- ========== STORAGE ==========
+local espEnabled = false
+local genIcons = {}
+local playerIcons = {}
+local loopConn = nil
+local refreshTask = nil
+
+-- ========== CLEAR ==========
+-- Perbaikan: clearGenerators akan menghapus semua VD_* yang bukan milik player character,
+-- dan juga membersihkan genIcons dan tombol list agar tidak tertinggal.
+local function clearGenerators()
+	-- Hapus VD_* di dalam workspace yang bukan milik player character.
+	for _, obj in ipairs(workspace:GetDescendants()) do
+		if obj.Name == "VD_Billboard" or obj.Name == "VD_Highlight" or obj.Name == "VD_Text" then
+			local parentModel = obj:FindFirstAncestorOfClass("Model")
+			local isPlayerChar = false
+			if parentModel then
+				local ply = Players:GetPlayerFromCharacter(parentModel)
+				if ply then
+					isPlayerChar = true -- skip player ESP
+				end
+			end
+
+			if not isPlayerChar then
+				-- Jika parentModel ada dan bertag generator -> hapus
+				-- Jika parentModel tidak ada (orphan) -> hapus
+				-- Jika parentModel ada tapi bukan player & bukan bertag -> juga hapus (mencegah ESP tertinggal)
+				pcall(function()
+					-- Pastikan tidak menghapus GUI yang ada di PlayerGui (kebersihan)
+					local root = obj
+					-- jika obj masih ada, destroy
+					if root and root.Parent then
+						root:Destroy()
+					end
+				end)
+			end
+		end
+	end
+
+	-- Hapus tombol di genList
+	for _, c in ipairs(genList:GetChildren()) do
+		pcall(function() c:Destroy() end)
+	end
+	genList.CanvasSize = UDim2.new(0,0,0,0)
+	genIcons = {}
+end
+
+local function clearAll()
+	-- Hapus semua VD_* di workspace (baik player maupun generator) -- dipanggil saat stopAll
+	for _, obj in ipairs(workspace:GetDescendants()) do
+		if obj.Name == "VD_Billboard" or obj.Name == "VD_Highlight" or obj.Name == "VD_Text" then
+			pcall(function() obj:Destroy() end)
+		end
+	end
+
+	-- Hapus GUI list generator
+	for _, c in ipairs(genList:GetChildren()) do
+		pcall(function() c:Destroy() end)
+	end
+	genList.CanvasSize = UDim2.new(0,0,0,0)
+	genIcons = {}
+	playerIcons = {}
+end
+
+local function createUIStroke(parent)
+	local stroke = Instance.new("UIStroke")
+	stroke.Thickness = 1
+	stroke.Transparency = 0.4
+	stroke.Color = Color3.new(0,0,0)
+	stroke.Parent = parent
+	return stroke
+end
+
+-- ========== GENERATOR ==========
+local function makeGenBtn()
+	local b = Instance.new("TextButton")
+	b.Size = UDim2.new(1,-6,0,20)
+	b.BackgroundColor3 = Color3.fromRGB(80,80,80)
+	b.TextColor3 = Color3.new(1,1,1)
+	b.Font = Enum.Font.SourceSansBold
+	b.TextSize = 12
+	b.Text = "Repair: 0%"
+	b.Parent = genList
+	return b
+end
+
+local function buildGeneratorESP()
+	-- build untuk setiap model yang bertag GENERATOR_TAG
+	for _, g in ipairs(CollectionService:GetTagged(GENERATOR_TAG)) do
+		-- validasi model
+		if g and g:IsA("Instance") then
+			local part = g.PrimaryPart or g:FindFirstChildWhichIsA("BasePart")
+			if part then
+				-- highlight (safely)
+				local ok, hl = pcall(function()
+					local h = Instance.new("Highlight")
+					h.Name = "VD_Highlight"
+					h:SetAttribute("VD", true)
+					h.Parent = g
+					h.FillColor = COLOR_GEN
+					h.OutlineTransparency = 0
+					return h
+				end)
+
+				-- billboard (safely)
+				local ok2, bb = pcall(function()
+					local bbg = Instance.new("BillboardGui")
+					bbg.Name = "VD_Billboard"
+					bbg:SetAttribute("VD", true)
+					bbg.Size = UDim2.new(0,140,0,20)
+					bbg.StudsOffset = Vector3.new(0,3,0)
+					bbg.AlwaysOnTop = true
+					bbg.Parent = part
+					return bbg
+				end)
+
+				if bb then
+					local txt = Instance.new("TextLabel")
+					txt.Name = "VD_Text"
+					txt:SetAttribute("VD", true)
+					txt.Size = UDim2.new(1,0,1,0)
+					txt.BackgroundTransparency = 1
+					txt.TextColor3 = COLOR_GEN
+					txt.Font = Enum.Font.SourceSansBold
+					txt.TextSize = GENERATOR_BB_SIZE
+					txt.Text = g.Name or "Generator"
+					txt.Parent = bb
+					createUIStroke(txt)
+
+					local btn = makeGenBtn()
+					btn.MouseButton1Click:Connect(function()
+						local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+						if hrp and part then
+							hrp.CFrame = part.CFrame + Vector3.new(0,3,0)
+						end
+					end)
+
+					genIcons[g] = { part = part, txt = txt, btn = btn, hl = hl }
+				end
+			end
+		end
+	end
+
+	-- re-position tombol list generator
+	local y = 0
+	for _, child in ipairs(genList:GetChildren()) do
+		if child:IsA("GuiObject") then
+			child.Position = UDim2.new(0,3,0,y)
+			y = y + 22
+		end
+	end
+	genList.CanvasSize = UDim2.new(0,0,0,y)
+end
+
+-- ========== PLAYER (STATIC BUILD) ==========
+local function buildPlayerESP()
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= LocalPlayer and p.Character then
+			local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				local teamColor = (LocalPlayer.Team and p.Team == LocalPlayer.Team) and COLOR_TEAM or COLOR_ENEMY
+				local hl = Instance.new("Highlight")
+				hl.Name = "VD_Highlight"
+				hl:SetAttribute("VD", true)
+				hl.Parent = p.Character
+				hl.FillColor = teamColor
+				hl.OutlineTransparency = 0
+
+				local bb = Instance.new("BillboardGui")
+				bb.Name = "VD_Billboard"
+				bb:SetAttribute("VD", true)
+				bb.Size = UDim2.new(0,120,0,18)
+				bb.StudsOffset = Vector3.new(0,3,0)
+				bb.AlwaysOnTop = true
+				bb.Parent = hrp
+
+				local txt = Instance.new("TextLabel")
+				txt.Name = "VD_Text"
+				txt:SetAttribute("VD", true)
+				txt.Size = UDim2.new(1,0,1,0)
+				txt.BackgroundTransparency = 1
+				txt.TextColor3 = teamColor
+				txt.Font = Enum.Font.SourceSansBold
+				txt.TextSize = PLAYER_BB_SIZE
+				txt.Text = p.Name
+				txt.Parent = bb
+				createUIStroke(txt)
+
+				playerIcons[p] = { bb = bb, txt = txt, hl = hl }
+			end
+		end
+	end
+end
+
+-- ========== UPDATE LOOP ==========
+local function updateLoop()
+	-- disconnect previous heartbeat if exists
+	if loopConn then
+		loopConn:Disconnect()
+		loopConn = nil
+	end
+
+	loopConn = RunService.Heartbeat:Connect(function()
+		if not espEnabled then return end
+
+		local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+
+		-- update players
+		for p, data in pairs(playerIcons) do
+			if p and data and data.txt and p.Character then
+				local ph = p.Character:FindFirstChild("HumanoidRootPart")
+				if ph and hrp then
+					local newColor = (LocalPlayer.Team and p.Team == LocalPlayer.Team) and COLOR_TEAM or COLOR_ENEMY
+					if data.txt.TextColor3 ~= newColor then
+						data.txt.TextColor3 = newColor
+						if data.hl then data.hl.FillColor = newColor end
+					end
+					local dist = math.floor((ph.Position - hrp.Position).Magnitude)
+					data.txt.Text = string.format("%s | %d Studs", p.Name, dist)
+				end
+			end
+		end
+
+		-- update generators
+		-- (also sanitize genIcons: remove entries where model was removed)
+		for g, data in pairs(genIcons) do
+			local validModel = (g and g.Parent and g:IsDescendantOf(game))
+			if not validModel then
+				-- model no longer exists -> cleanup associated UI if still present
+				pcall(function()
+					if data and data.btn and data.btn.Parent then data.btn:Destroy() end
+					if data and data.txt and data.txt.Parent then data.txt.Parent:Destroy() end
+					if data and data.hl and data.hl.Parent then data.hl:Destroy() end
+				end)
+				genIcons[g] = nil
+			else
+				if g and data and data.txt and data.part then
+					local myHrp = hrp
+					local dist = myHrp and math.floor((myHrp.Position - data.part.Position).Magnitude) or 0
+					local repair = nil
+					for _, c in ipairs(g:GetChildren()) do
+						if (c:IsA("NumberValue") or c:IsA("IntValue")) and c.Name == "RepairProgress" then
+							repair = c.Value
+							break
+						end
+					end
+					if repair == nil then
+						repair = g:GetAttribute("RepairProgress")
+					end
+					local percent = 0
+					if repair then
+						if type(repair) == "number" then
+							if repair <= 1 then
+								percent = math.floor(repair * 100)
+							else
+								percent = math.floor(repair)
+							end
+						end
+					end
+					data.txt.Text = string.format("%d Studs | Repair: %d%%", dist, percent)
+					if data.btn then
+						pcall(function() data.btn.Text = string.format("Repair: %d%%", percent) end)
+					end
+				end
+			end
+		end
+	end)
+end
+
+-- ========== START / STOP REFRESH (RESET LOOP GENERATOR) ==========
+local function startRefresh()
+	-- jika sudah ada refreshTask, jangan spawn baru
+	if refreshTask then return end
+
+	refreshTask = task.spawn(function()
+		-- jalankan segera, lalu setiap ESP_REFRESH detik selama espEnabled == true
+		while espEnabled do
+			-- bersihkan generator ESP (termasuk orphaned) dan rebuild
+			pcall(clearGenerators)
+			pcall(buildGeneratorESP)
+
+			-- tunggu dengan interval kecil agar bisa berhenti lebih cepat saat espEnabled==false
+			local waited = 0
+			while waited < ESP_REFRESH and espEnabled do
+				task.wait(0.5)
+				waited = waited + 0.5
+			end
+		end
+		-- selesai -> nil-kan referensi task
+		refreshTask = nil
+	end)
+end
+
+local function stopAll()
+	espEnabled = false
+	-- disconnect heartbeat
+	if loopConn then
+		pcall(function() loopConn:Disconnect() end)
+		loopConn = nil
+	end
+	-- refreshTask akan berhenti sendiri karena espEnabled==false; biarkan nil
+	refreshTask = nil
+	-- bersihkan semua ESP & GUI
+	pcall(clearAll)
+end
+
+-- ========== TOGGLE ==========
+espBtn.MouseButton1Click:Connect(function()
+	espEnabled = not espEnabled
+	if espEnabled then
+		-- mulai ESP
+		pcall(clearAll)
+		pcall(buildPlayerESP)
+		pcall(buildGeneratorESP)
+		pcall(updateLoop)
+		pcall(startRefresh)
+		genFrame.Visible = true
+		espBtn.Text = "ESP ON"
+		espBtn.BackgroundColor3 = Color3.fromRGB(0,200,100)
+	else
+		-- hentikan ESP dan loop
+		pcall(stopAll)
+		genFrame.Visible = false
+		espBtn.Text = "ESP OFF"
+		espBtn.BackgroundColor3 = Color3.fromRGB(0,120,255)
+	end
+end)
