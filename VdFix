@@ -1,0 +1,578 @@
+-- ===================== Violence Hub v7.5d — Compact Dark Hub Edition (☠️ Draggable Logo) =====================
+-- Centered (350x250), dark semi-transparent, text = light gray
+-- Preserves original ESP visuals & loop behavior (clearGenerators before rebuild)
+-- Tabs: Players | Generators | ESP
+-- RightCtrl toggle, minimize ☠️ logo (draggable), PC cursor support
+-- ==================================================================================================
+
+-- Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local CollectionService = game:GetService("CollectionService")
+local UserInputService = game:GetService("UserInputService")
+local workspace = workspace
+
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+-- ========== CONFIG ==========
+local GENERATOR_TAG = "Generator"
+local ESP_REFRESH = 5
+local PLAYER_BB_SIZE = 11
+local GENERATOR_BB_SIZE = 15
+local COLOR_TEAM = Color3.fromRGB(0,150,255)
+local COLOR_ENEMY = Color3.fromRGB(255,0,0)
+local COLOR_GEN = Color3.fromRGB(0,255,0)
+
+-- ========== SAFE GUI PARENT ==========
+local function safeParent(gui)
+local ok, res = pcall(function() return gethui() end)
+if ok and typeof(res) == "Instance" then gui.Parent = res return end
+local ok2, core = pcall(function() return game:GetService("CoreGui") end)
+if ok2 and typeof(core) == "Instance" then gui.Parent = core return end
+gui.Parent = PlayerGui
+end
+
+-- ========== STATE ==========
+local espEnabled = false
+local genIcons = {}
+local playerIcons = {}
+local loopConn = nil
+local refreshTask = nil
+
+local function createUIStroke(parent)
+local s = Instance.new("UIStroke")
+s.Thickness = 1
+s.Transparency = 0.4
+s.Color = Color3.new(0,0,0)
+s.Parent = parent
+return s
+end
+
+-- ========== MAIN HUB GUI ==========
+local HUB_WIDTH, HUB_HEIGHT, HUB_TRANSP = 350, 250, 0.2
+
+local hubGui = Instance.new("ScreenGui")
+hubGui.Name = "ViolenceHub_v7_5d"
+hubGui.ResetOnSpawn = false
+safeParent(hubGui)
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "MainHub"
+mainFrame.Size = UDim2.new(0,HUB_WIDTH,0,HUB_HEIGHT)
+mainFrame.Position = UDim2.new(0.5,-HUB_WIDTH/2,0.5,-HUB_HEIGHT/2)
+mainFrame.BackgroundColor3 = Color3.fromRGB(26,26,26)
+mainFrame.BackgroundTransparency = HUB_TRANSP
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.Draggable = true
+mainFrame.Parent = hubGui
+Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0,8)
+
+-- top bar
+local topBar = Instance.new("Frame", mainFrame)
+topBar.Size = UDim2.new(1,0,0,30)
+topBar.BackgroundTransparency = 1
+
+local titleLabel = Instance.new("TextLabel", topBar)
+titleLabel.Size = UDim2.new(1,-120,1,0)
+titleLabel.Position = UDim2.new(0,12,0,0)
+titleLabel.BackgroundTransparency = 1
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.TextSize = 14
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+titleLabel.Text = "Violence District — Hub"
+titleLabel.TextColor3 = Color3.fromRGB(200,200,200)
+
+local hintLabel = Instance.new("TextLabel", topBar)
+hintLabel.Size = UDim2.new(0,88,1,0)
+hintLabel.Position = UDim2.new(1,-108,0,0)
+hintLabel.BackgroundTransparency = 1
+hintLabel.Font = Enum.Font.SourceSans
+hintLabel.TextSize = 10
+hintLabel.Text = "RightCtrl to toggle"
+hintLabel.TextColor3 = Color3.fromRGB(160,160,160)
+hintLabel.TextXAlignment = Enum.TextXAlignment.Right
+
+local closeBtn = Instance.new("TextButton", topBar)
+closeBtn.Size = UDim2.new(0,28,0,20)
+closeBtn.Position = UDim2.new(1,-36,0,5)
+closeBtn.BackgroundColor3 = Color3.fromRGB(180,60,60)
+closeBtn.BorderSizePixel = 0
+closeBtn.Text = "✕"
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 12
+closeBtn.TextColor3 = Color3.fromRGB(245,245,245)
+Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0,6)
+
+local minBtn = Instance.new("TextButton", topBar)
+minBtn.Size = UDim2.new(0,28,0,20)
+minBtn.Position = UDim2.new(1,-70,0,5)
+minBtn.BackgroundColor3 = Color3.fromRGB(110,110,110)
+minBtn.BorderSizePixel = 0
+minBtn.Text = "—"
+minBtn.Font = Enum.Font.GothamBold
+minBtn.TextSize = 12
+minBtn.TextColor3 = Color3.fromRGB(245,245,245)
+Instance.new("UICorner", minBtn).CornerRadius = UDim.new(0,6)
+
+-- body
+local body = Instance.new("Frame", mainFrame)
+body.Size = UDim2.new(1,-12,1,-42)
+body.Position = UDim2.new(0,6,0,34)
+body.BackgroundColor3 = Color3.fromRGB(18,18,18)
+body.BackgroundTransparency = 0.05
+Instance.new("UICorner", body).CornerRadius = UDim.new(0,6)
+
+-- Tabs
+local tabsBar = Instance.new("Frame", body)
+tabsBar.Size = UDim2.new(1,0,0,32)
+tabsBar.BackgroundTransparency = 1
+
+local function makeTabBtn(text, x)
+local b = Instance.new("TextButton", tabsBar)
+b.Size = UDim2.new(0,110,1,0)
+b.Position = UDim2.new(0,(x-1)*112,0,0)
+b.BackgroundTransparency = 1
+b.Text = text
+b.Font = Enum.Font.Gotham
+b.TextSize = 12
+b.TextColor3 = Color3.fromRGB(200,200,200)
+b.AutoButtonColor = true
+return b
+end
+
+local tabPlayers = makeTabBtn("Players", 1)
+local tabGenerators = makeTabBtn("Generators", 2)
+local tabESP = makeTabBtn("ESP", 3)
+
+local panels = Instance.new("Frame", body)
+panels.Size = UDim2.new(1,0,1,-36)
+panels.Position = UDim2.new(0,0,0,36)
+panels.BackgroundTransparency = 1
+
+local playersPanel = Instance.new("Frame", panels)
+playersPanel.Size = UDim2.new(1,0,1,0)
+playersPanel.BackgroundTransparency = 1
+playersPanel.Visible = true
+
+local generatorsPanel = Instance.new("Frame", panels)
+generatorsPanel.Size = UDim2.new(1,0,1,0)
+generatorsPanel.BackgroundTransparency = 1
+generatorsPanel.Visible = false
+
+local espPanel = Instance.new("Frame", panels)
+espPanel.Size = UDim2.new(1,0,1,0)
+espPanel.BackgroundTransparency = 1
+espPanel.Visible = false
+
+local function showPanel(p)
+playersPanel.Visible = (p == playersPanel)
+generatorsPanel.Visible = (p == generatorsPanel)
+espPanel.Visible = (p == espPanel)
+end
+tabPlayers.MouseButton1Click:Connect(function() showPanel(playersPanel) end)
+tabGenerators.MouseButton1Click:Connect(function() showPanel(generatorsPanel) end)
+tabESP.MouseButton1Click:Connect(function() showPanel(espPanel) end)
+
+-- ========== PLAYER LIST ==========
+local playerList = Instance.new("ScrollingFrame", playersPanel)
+playerList.Size = UDim2.new(1,-6,1,-6)
+playerList.Position = UDim2.new(0,3,0,3)
+playerList.CanvasSize = UDim2.new(0,0,0,0)
+playerList.ScrollBarThickness = 6
+playerList.BackgroundColor3 = Color3.fromRGB(46,46,46)
+
+local function makePlayerBtn(p)
+local b = Instance.new("TextButton")
+b.Size = UDim2.new(1,-6,0,20)
+b.Text = p.Name
+b.TextColor3 = Color3.new(1,1,1)
+b.Font = Enum.Font.SourceSansBold
+b.TextSize = 11
+b.BackgroundColor3 = (LocalPlayer.Team and p.Team == LocalPlayer.Team)
+and Color3.fromRGB(0,150,0) or Color3.fromRGB(150,0,0)
+b.Parent = playerList
+b.MouseButton1Click:Connect(function()
+local char = p.Character
+local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+if char and hrp then
+local part = char:FindFirstChild("HumanoidRootPart")
+if part then
+pcall(function() hrp.CFrame = part.CFrame + Vector3.new(0,3,0) end)
+end
+end
+end)
+return b
+end
+
+local function refreshPlayerList()
+playerList:ClearAllChildren()
+local y = 0
+for _,p in ipairs(Players:GetPlayers()) do
+if p ~= LocalPlayer then
+local btn = makePlayerBtn(p)
+btn.Position = UDim2.new(0,3,0,y)
+y += 22
+end
+end
+playerList.CanvasSize = UDim2.new(0,0,0,y)
+end
+Players.PlayerAdded:Connect(refreshPlayerList)
+Players.PlayerRemoving:Connect(refreshPlayerList)
+refreshPlayerList()
+
+-- ========== GENERATOR LIST ==========
+local genList = Instance.new("ScrollingFrame", generatorsPanel)
+genList.Size = UDim2.new(1,-6,1,-6)
+genList.Position = UDim2.new(0,3,0,3)
+genList.CanvasSize = UDim2.new(0,0,0,0)
+genList.ScrollBarThickness = 6
+genList.BackgroundColor3 = Color3.fromRGB(40,40,40)
+
+local function makeGenBtn()
+local b = Instance.new("TextButton")
+b.Size = UDim2.new(1,-6,0,18)
+b.BackgroundColor3 = Color3.fromRGB(80,80,80)
+b.TextColor3 = Color3.new(1,1,1)
+b.Font = Enum.Font.SourceSansBold
+b.TextSize = 11
+b.Text = "Repair: 0%"
+b.Parent = genList
+return b
+end
+
+-- ========== CLEAR + BUILD ESP ==========
+local function clearGenerators()
+for _,obj in ipairs(workspace:GetDescendants()) do
+if obj.Name == "VD_Billboard" or obj.Name == "VD_Highlight" or obj.Name == "VD_Text" then
+local parentModel = obj:FindFirstAncestorOfClass("Model")
+local isPlayerChar = parentModel and Players:GetPlayerFromCharacter(parentModel)
+if not isPlayerChar then pcall(function() obj:Destroy() end) end
+end
+end
+for _,c in ipairs(genList:GetChildren()) do pcall(function() c:Destroy() end) end
+genList.CanvasSize = UDim2.new(0,0,0,0)
+genIcons = {}
+end
+
+local function clearAll()
+for _, obj in ipairs(workspace:GetDescendants()) do
+if obj.Name == "VD_Billboard" or obj.Name == "VD_Highlight" or obj.Name == "VD_Text" then
+pcall(function() obj:Destroy() end)
+end
+end
+genIcons, playerIcons = {}, {}
+end
+
+local function buildGeneratorESP()
+for _, g in ipairs(CollectionService:GetTagged(GENERATOR_TAG)) do
+if g and g:IsA("Instance") then
+local part = g.PrimaryPart or g:FindFirstChildWhichIsA("BasePart")
+if part then
+local hl = Instance.new("Highlight")
+hl.Name = "VD_Highlight"; hl.FillColor = COLOR_GEN; hl.Parent = g
+
+local bb = Instance.new("BillboardGui")  
+			bb.Name = "VD_Billboard"  
+			bb.Size = UDim2.new(0,120,0,18)  
+			bb.StudsOffset = Vector3.new(0,3,0)  
+			bb.AlwaysOnTop = true  
+			bb.Parent = part  
+
+			local txt = Instance.new("TextLabel")  
+			txt.Name = "VD_Text"  
+			txt.Size = UDim2.new(1,0,1,0)  
+			txt.BackgroundTransparency = 1  
+			txt.TextColor3 = COLOR_GEN  
+			txt.Font = Enum.Font.SourceSansBold  
+			txt.TextSize = GENERATOR_BB_SIZE  
+			txt.Text = g.Name or "Generator"  
+			txt.Parent = bb  
+			createUIStroke(txt)  
+
+			local btn = makeGenBtn()  
+			btn.MouseButton1Click:Connect(function()  
+				local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")  
+				if hrp and part then pcall(function() hrp.CFrame = part.CFrame + Vector3.new(0,3,0) end) end  
+			end)  
+
+			genIcons[g] = {part=part,txt=txt,btn=btn,hl=hl,model=g}  
+		end  
+	end  
+end  
+local y=0  
+for _,child in ipairs(genList:GetChildren()) do  
+	if child:IsA("GuiObject") then  
+		child.Position = UDim2.new(0,3,0,y)  
+		y+=20  
+	end  
+end  
+genList.CanvasSize = UDim2.new(0,0,0,y)
+
+end
+
+local function buildPlayerESP()
+for _,p in ipairs(Players:GetPlayers()) do
+if p~=LocalPlayer and p.Character then
+local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+if hrp then
+local teamColor = (LocalPlayer.Team and p.Team == LocalPlayer.Team) and COLOR_TEAM or COLOR_ENEMY
+local hl = Instance.new("Highlight")
+hl.Name = "VD_Highlight"; hl.FillColor = teamColor; hl.Parent = p.Character
+
+local bb = Instance.new("BillboardGui")  
+			bb.Name = "VD_Billboard"  
+			bb.Size = UDim2.new(0,120,0,18)  
+			bb.StudsOffset = Vector3.new(0,3,0)  
+			bb.AlwaysOnTop = true  
+			bb.Parent = hrp  
+
+			local txt = Instance.new("TextLabel")  
+			txt.Name = "VD_Text"  
+			txt.Size = UDim2.new(1,0,1,0)  
+			txt.BackgroundTransparency = 1  
+			txt.TextColor3 = teamColor  
+			txt.Font = Enum.Font.SourceSansBold  
+			txt.TextSize = PLAYER_BB_SIZE  
+			txt.Text = p.Name  
+			txt.Parent = bb  
+			createUIStroke(txt)  
+
+			playerIcons[p] = {bb=bb,txt=txt,hl=hl}  
+		end  
+	end  
+end
+
+end
+
+local function updateLoop()
+if loopConn then loopConn:Disconnect() end
+loopConn = RunService.Heartbeat:Connect(function()
+if not espEnabled then return end
+local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+for p,data in pairs(playerIcons) do
+if p.Character then
+local ph = p.Character:FindFirstChild("HumanoidRootPart")
+if ph and hrp then
+local newColor = (LocalPlayer.Team and p.Team==LocalPlayer.Team) and COLOR_TEAM or COLOR_ENEMY
+data.txt.TextColor3=newColor; data.hl.FillColor=newColor
+local dist=math.floor((ph.Position-hrp.Position).Magnitude)
+data.txt.Text=string.format("%s | %d Studs",p.Name,dist)
+end
+end
+end
+for g,data in pairs(genIcons) do
+if g and data.part then
+local myhrp=hrp
+local dist=myhrp and math.floor((myhrp.Position-data.part.Position).Magnitude) or 0
+local repair=g:GetAttribute("RepairProgress") or 0
+if type(repair)=="number" and repair<=1 then repair=repair*100 end
+data.txt.Text=string.format("%d Studs | Repair: %d%%",dist,math.floor(repair))
+if data.btn then data.btn.Text=string.format("Repair: %d%%",math.floor(repair)) end
+end
+end
+end)
+end
+
+local function startRefresh()
+if refreshTask then return end
+refreshTask = task.spawn(function()
+while espEnabled do
+pcall(clearGenerators)
+pcall(buildGeneratorESP)
+for i=1,ESP_REFRESH*2 do
+if not espEnabled then break end
+task.wait(0.5)
+end
+end
+refreshTask=nil
+end)
+end
+
+local function stopAll()
+espEnabled=false
+if loopConn then pcall(function() loopConn:Disconnect() end) loopConn=nil end
+refreshTask=nil
+for ,obj in ipairs(workspace:GetDescendants()) do
+if obj.Name:match("^VD") then pcall(function() obj:Destroy() end) end
+end
+for _,c in ipairs(genList:GetChildren()) do pcall(function() c:Destroy() end) end
+for _,c in ipairs(playerList:GetChildren()) do pcall(function() c:Destroy() end) end
+genIcons,playerIcons={},{}
+end
+
+-- ESP Button
+local espBtn = Instance.new("TextButton", espPanel)
+espBtn.AnchorPoint = Vector2.new(0.5, 0)
+espBtn.Size = UDim2.new(0,120,0,28)
+espBtn.Position = UDim2.new(0.5,-60,0,30)
+espBtn.BackgroundColor3 = Color3.fromRGB(0,110,220)
+espBtn.TextColor3 = Color3.new(1,1,1)
+espBtn.Text = "ESP OFF"
+espBtn.Font = Enum.Font.SourceSansBold
+espBtn.TextSize = 12
+Instance.new("UICorner", espBtn).CornerRadius = UDim.new(0,6)
+
+espBtn.MouseButton1Click:Connect(function()
+espEnabled = not espEnabled
+if espEnabled then
+pcall(clearAll)
+pcall(buildPlayerESP)
+pcall(buildGeneratorESP)
+pcall(updateLoop)
+pcall(startRefresh)
+espBtn.Text = "ESP ON"
+espBtn.BackgroundColor3 = Color3.fromRGB(0,180,100)
+else
+pcall(stopAll)
+espBtn.Text = "ESP OFF"
+espBtn.BackgroundColor3 = Color3.fromRGB(0,110,220)
+end
+end)
+
+-- ========== Build initial generator list so teleport available even if ESP off ==========
+pcall(buildGeneratorESP)
+
+-- ========== Player list periodic refresh ==========
+task.spawn(function()
+while true do
+task.wait(3)
+pcall(refreshPlayerList)
+end
+end)
+
+-- ========== CUSTOM CURSOR (PC) ==========
+local isTouch = UserInputService.TouchEnabled
+local showCustomCursor = not isTouch
+local cursorGui = Instance.new("ScreenGui")
+cursorGui.Name = "VD_Hub_Cursor_v7_5d"
+cursorGui.ResetOnSpawn = false
+safeParent(cursorGui)
+
+local cursorFrame = Instance.new("ImageLabel", cursorGui)
+cursorFrame.Name = "VD_Cursor"
+cursorFrame.Size = UDim2.new(0,16,0,16)
+cursorFrame.AnchorPoint = Vector2.new(0.5,0.5)
+cursorFrame.BackgroundTransparency = 0
+cursorFrame.Image = ""
+cursorFrame.Visible = showCustomCursor
+cursorFrame.ZIndex = 9999
+cursorFrame.BackgroundColor3 = Color3.fromRGB(230,230,230)
+createUIStroke(cursorFrame)
+cursorFrame.Parent = cursorGui
+
+if showCustomCursor then
+UserInputService.MouseIconEnabled = false
+RunService.RenderStepped:Connect(function()
+local mouse = LocalPlayer:GetMouse()
+if mouse and cursorFrame and cursorFrame.Parent then
+cursorFrame.Position = UDim2.fromOffset(mouse.X, mouse.Y)
+end
+end)
+else
+UserInputService.MouseIconEnabled = true
+cursorFrame.Visible = false
+end
+
+-- ========== ☠️ Minimize System + Keyboard Toggle (Draggable Logo) ==========
+local minimized = false
+local hubVisible = true
+
+-- create draggable logo with high ZIndex
+local logoBtn = Instance.new("TextButton")
+logoBtn.Size = UDim2.new(0, 42, 0, 42)
+logoBtn.Position = UDim2.new(0.5, -21, 0.5, -21)
+logoBtn.AnchorPoint = Vector2.new(0.5, 0.5)
+logoBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+logoBtn.Text = "☠️"
+logoBtn.Font = Enum.Font.GothamBold
+logoBtn.TextSize = 22
+logoBtn.TextColor3 = Color3.fromRGB(220, 220, 220)
+logoBtn.Visible = false
+logoBtn.Active = true
+logoBtn.Draggable = true
+logoBtn.ZIndex = 99999
+Instance.new("UICorner", logoBtn).CornerRadius = UDim.new(0, 10)
+logoBtn.Parent = hubGui
+
+-- helper toggle function: if minimized -> always restore; otherwise toggle visibility
+local function toggleHub()
+if minimized then
+-- restore from minimized
+minimized = false
+logoBtn.Visible = false
+mainFrame.Visible = true
+body.Visible = true
+mainFrame.Size = UDim2.new(0, HUB_WIDTH, 0, HUB_HEIGHT)
+hubVisible = true
+if showCustomCursor then UserInputService.MouseIconEnabled = false end
+else
+-- regular toggle visibility
+hubVisible = not hubVisible
+mainFrame.Visible = hubVisible
+if showCustomCursor then
+UserInputService.MouseIconEnabled = not mainFrame.Visible
+end
+end
+end
+
+-- RightCtrl keybind
+UserInputService.InputBegan:Connect(function(input, processed)
+if processed then return end
+if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == Enum.KeyCode.RightControl then
+toggleHub()
+end
+end)
+
+-- minimize button behavior
+minBtn.MouseButton1Click:Connect(function()
+minimized = not minimized
+if minimized then
+-- hide hub, show draggable logo
+body.Visible = false
+mainFrame.Visible = false
+logoBtn.Visible = true
+-- ensure custom cursor is visible again if using cursor (but keep MouseIcon disabled so UI remains consistent)
+if showCustomCursor then UserInputService.MouseIconEnabled = false end
+else
+body.Visible = true
+mainFrame.Visible = true
+mainFrame.Size = UDim2.new(0, HUB_WIDTH, 0, HUB_HEIGHT)
+logoBtn.Visible = false
+if showCustomCursor then UserInputService.MouseIconEnabled = false end
+end
+end)
+
+-- clicking logo restores
+logoBtn.MouseButton1Click:Connect(function()
+minimized = false
+mainFrame.Visible = true
+body.Visible = true
+mainFrame.Size = UDim2.new(0, HUB_WIDTH, 0, HUB_HEIGHT)
+logoBtn.Visible = false
+hubVisible = true
+if showCustomCursor then UserInputService.MouseIconEnabled = false end
+end)
+
+-- close button hides both hub and logo
+closeBtn.MouseButton1Click:Connect(function()
+mainFrame.Visible = false
+logoBtn.Visible = false
+hubVisible = false
+minimized = false
+if showCustomCursor then UserInputService.MouseIconEnabled = true end
+end)
+
+-- ========== Default panel shown ==========
+showPanel(playersPanel)
+
+-- ========== Cleanup on PlayerGui removal ==========
+PlayerGui.AncestryChanged:Connect(function()
+if not PlayerGui:IsDescendantOf(game) then
+pcall(function() if loopConn then loopConn:Disconnect() end end)
+pcall(function() UserInputService.MouseIconEnabled = true end)
+end
+end)
+
+-- End of v7.5d Compact Dark (complete)
